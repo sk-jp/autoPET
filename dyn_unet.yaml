@@ -1,0 +1,361 @@
+Path:
+    input_path: /input/         # according to the specified grand-challenge interfaces
+    output_path: /output/images/automated-petct-lesion-segmentation/  # according to the specified grand-challenge interfaces
+    nii_path: /opt/algorithm/   # where to store the nii files
+#    ckpt_path = '/opt/algorithm/dyn_unet-epoch=253-valid_loss=0.16.ckpt'
+
+General:
+    project: autoPET
+#    seed: 1234
+    precision: 16    # 16, 32, bf16
+    # ddp, ddp2, dp, none
+    strategy: ddp
+    gpus: [0]
+    epoch: &epoch 300
+    debug: False
+    lr_tune: False
+    predict: False
+    valid_only: False
+
+Data:
+    dataset:
+        name: autoPET
+#        top_dir: /data/MICCAI2022_autoPET/FDG-PET-CT-Lesions
+#        csv_path_pos_neg: datalist/datalist_pos.csv
+#        csv_path_neg: datalist/datalist_no_pos.csv
+#        csv_path_predict: datalist/datalist_predict.csv
+#        train_data_ratio: 0.9
+#        cache_dir: /data4/cache/autoPET
+#        patch_size: &patch_size [96, 96, 96]
+        patch_size: &patch_size [48, 48, 32]
+        spacing: &spacing [2, 2, 3]   # for dynamic UNet
+#        patch_size: &patch_size [48, 48, 48]
+#        spacing: &spacing [4, 4, 6]
+        sliding_window_batch_size: 4
+        total_fold: 5
+    dataloader:
+        batch_size: 1
+        num_workers: 0
+        train:
+            shuffle: True
+        valid:
+            shuffle: False
+        test:
+            shuffle: False
+
+Model:
+    arch: dyn_unet
+    params:
+        spatial_dims: 3
+        in_channels: 2
+        out_channels: 2
+        deep_supervision: True
+        deep_supr_num: &deep_supr_num 2
+        res_block: True
+#    pretrained: None
+#    pretrained: /Program/deeplearning/autoPET2022/2_train/results/dyn_unet/220603-101723-dyn_unet/dyn_unet-epoch=265-valid_loss=0.37.ckpt
+#    pretrained: /Program/deeplearning/autoPET2022/2_train/results/220609-130532-dyn_unet-LR0.001/dyn_unet-epoch=273-valid_loss=0.33.ckpt
+    pretrained:
+        - /opt/algorithm/dyn_unet-epoch223-valid_loss0.45-CV0.ckpt
+        - /opt/algorithm/dyn_unet-epoch251-valid_loss0.47-CV1.ckpt
+        - /opt/algorithm/dyn_unet-epoch102-valid_loss0.48-CV2.ckpt
+        - /opt/algorithm/dyn_unet-epoch248-valid_loss0.51-CV3.ckpt
+        - /opt/algorithm/dyn_unet-epoch266-valid_loss0.48-CV4.ckpt
+    post_process: False
+
+#Optimizer:
+#    optimizer:
+#        name: AdamW
+#        params:
+#            lr: !!python/float 1e-3   # 1 GPU
+#            weight_decay: !!python/float 1e-5
+#    lr_scheduler:
+#        name: CosineAnnealingLR
+#        params:
+#            T_max: *epoch
+#    accumulate_grad_batches: 1
+
+#Loss:
+#    base_loss:
+#        name: DiceCELoss
+#        params:
+#            include_background: False
+#            to_onehot_y: True
+#            softmax: True
+#    loss:
+#        name: DeepSuperLoss
+#        params:
+#            deep_supr_num: *deep_supr_num
+
+Transform:
+    intensity_range_param_ct:
+        a_min: &a_min_ct -100
+        a_max: &a_max_ct 250
+        b_min: &b_min_ct 0.0
+        b_max: &b_max_ct 1.0
+        clip: &clip_ct True
+    intensity_range_param_suv:
+        a_min: &a_min_suv 0
+        a_max: &a_max_suv 15
+        b_min: &b_min_suv 0.0
+        b_max: &b_max_suv 1.0
+        clip: &clip_suv False            
+#     train_pos_neg:
+#         - name: LoadImaged
+#           params:
+#             keys: ["CTres", "SUV", "SEG"]
+#         - name: AddChanneld
+#           params:
+#             keys: ["CTres", "SUV", "SEG"]
+# #        - name: Orientationd
+# #          params:
+# #            keys: ["CTres", "SUV", "SEG"]
+# #            axcodes: "RAS"
+# #        - name: Spacingd
+# #          params:
+# #            keys: ["CTres", "SUV", "SEG"]
+# #            pixdim: *spacing        
+# #            mode: ["bilinear", "bilinear", "nearest"]
+#         - name: ScaleIntensityRanged
+#           params:
+#             keys: ["CTres"]
+#             a_min: *a_min_ct
+#             a_max: *a_max_ct
+#             b_min: *b_min_ct
+#             b_max: *b_max_ct
+#             clip: *clip_ct
+#         - name: ScaleIntensityRanged
+#           params:
+#             keys: ["SUV"]
+#             a_min: *a_min_suv
+#             a_max: *a_max_suv
+#             b_min: *b_min_suv
+#             b_max: *b_max_suv
+#             clip: *clip_suv
+#         - name: CropForegroundd
+#           params:
+#             keys: ["CTres", "SUV", "SEG"]
+#             source_key: "CTres"
+#         - name: ConcatItemsd
+#           params:
+#             keys: ["CTres", "SUV"]
+#             name: "CTres_SUV"
+#             dim: 0                                 
+#         - name: RandCropByPosNegLabeld
+#           params:
+#             keys: ["CTres_SUV", "SEG"]
+#             label_key: "SEG"
+#             spatial_size: *patch_size
+#             pos: 2
+#             neg: 1
+#             num_samples: 12
+# #            image_key: "CTres"
+# #            image_threshold: 0
+#         # - name: RandCropByLabelClassesd
+#         #   params:
+#         #     keys: ["CTres", "SEG"]
+#         #     label_key: "SEG"
+#         #     spatial_size: *patch_size
+#         #     ratios: [1, 0]
+#         #     num_classes: 2
+#         #     num_samples: 4
+#         # - name: RandFlipd
+#         #   params:
+#         #     keys: ["CTres", "SUV", "SEG"]
+#         #     spatial_axis: [0]
+#         #     prob: 0.10
+#         # - name: RandFlipd
+#         #   params:
+#         #     keys: ["CTres", "SUV", "SEG"]
+#         #     spatial_axis: [1]
+#         #     prob: 0.10
+#         # - name: RandFlipd
+#         #   params:
+#         #     keys: ["CTres", "SUV", "SEG"]
+#         #     spatial_axis: [2]
+#         #     prob: 0.10
+#         # - name: RandRotate90d
+#         #   params:
+#         #     keys: ["CTres", "SUV", "SEG"]
+#         #     prob: 0.10
+#         #     max_k: 3
+#         # - name: RandShiftIntensityd
+#         #   params:
+#         #     keys: ["CTres", "SUV"]
+#         #     offsets: 0.10
+#         #     prob: 0.50
+#         - name: ToTensord
+#           params:
+#             keys: ["CTres_SUV", "SEG"]        
+#     train_neg:
+#         - name: LoadImaged
+#           params:
+#             keys: ["CTres", "SUV", "SEG"]
+#         - name: AddChanneld
+#           params:
+#             keys: ["CTres", "SUV", "SEG"]
+# #        - name: Orientationd
+# #          params:
+# #            keys: ["CTres", "SUV", "SEG"]
+# #            axcodes: "RAS"
+# #        - name: Spacingd
+# #          params:
+# #            keys: ["CTres", "SUV", "SEG"]
+# #            pixdim: *spacing        
+# #            mode: ["bilinear", "bilinear", "nearest"]
+#         - name: ScaleIntensityRanged
+#           params:
+#             keys: ["CTres"]
+#             a_min: *a_min_ct
+#             a_max: *a_max_ct
+#             b_min: *b_min_ct
+#             b_max: *b_max_ct
+#             clip: *clip_ct
+#         - name: ScaleIntensityRanged
+#           params:
+#             keys: ["SUV"]
+#             a_min: *a_min_suv
+#             a_max: *a_max_suv
+#             b_min: *b_min_suv
+#             b_max: *b_max_suv
+#             clip: *clip_suv
+#         - name: CropForegroundd
+#           params:
+#             keys: ["CTres", "SUV", "SEG"]
+#             source_key: "CTres"
+#         - name: ConcatItemsd
+#           params:
+#             keys: ["CTres", "SUV"]
+#             name: "CTres_SUV"
+#             dim: 0                                 
+#         - name: RandCropByLabelClassesd
+#           params:
+#             keys: ["CTres_SUV", "SEG"]
+#             label_key: "SEG"
+#             spatial_size: *patch_size
+#             ratios: [1, 0]
+#             num_classes: 2
+#             num_samples: 4
+#         # - name: RandFlipd
+#         #   params:
+#         #     keys: ["CTres", "SUV", "SEG"]
+#         #     spatial_axis: [0]
+#         #     prob: 0.10
+#         # - name: RandFlipd
+#         #   params:
+#         #     keys: ["CTres", "SUV", "SEG"]
+#         #     spatial_axis: [1]
+#         #     prob: 0.10
+#         # - name: RandFlipd
+#         #   params:
+#         #     keys: ["CTres", "SUV", "SEG"]
+#         #     spatial_axis: [2]
+#         #     prob: 0.10
+#         # - name: RandRotate90d
+#         #   params:
+#         #     keys: ["CTres", "SUV", "SEG"]
+#         #     prob: 0.10
+#         #     max_k: 3
+#         # - name: RandShiftIntensityd
+#         #   params:
+#         #     keys: ["CTres", "SUV"]
+#         #     offsets: 0.10
+#         #     prob: 0.50
+#         - name: ToTensord
+#           params:
+#             keys: ["CTres_SUV", "SEG"]        
+#     valid:
+#         - name: LoadImaged
+#           params:
+#             keys: ["CTres", "SUV", "SEG"]
+#         - name: AddChanneld
+#           params:
+#             keys: ["CTres", "SUV", "SEG"]
+# #        - name: Orientationd
+# #          params:
+# #            keys: ["CTres", "SUV", "SEG"]
+# #            axcodes: "RAS"
+# #        - name: Spacingd
+# #          params:
+# #            keys: ["CTres", "SUV", "SEG"]
+# #            pixdim: *spacing        
+# #            mode: ["bilinear", "bilinear", "nearest"]
+#         - name: ScaleIntensityRanged
+#           params:
+#             keys: ["CTres"]
+#             a_min: *a_min_ct
+#             a_max: *a_max_ct
+#             b_min: *b_min_ct
+#             b_max: *b_max_ct
+#             clip: *clip_ct
+#         - name: ScaleIntensityRanged
+#           params:
+#             keys: ["SUV"]
+#             a_min: *a_min_suv
+#             a_max: *a_max_suv
+#             b_min: *b_min_suv
+#             b_max: *b_max_suv
+#             clip: *clip_suv
+#         - name: CropForegroundd
+#           params:
+#             keys: ["CTres", "SUV", "SEG"]
+#             source_key: "CTres"
+#         - name: ConcatItemsd
+#           params:
+#             keys: ["CTres", "SUV"]
+#             name: "CTres_SUV"
+#             dim: 0                                 
+#         - name: ToTensord
+#           params:
+#             keys: ["CTres_SUV", "SEG"]
+    test:
+        - name: LoadImaged
+          params:
+            keys: ["CTres", "SUV"]
+        - name: AddChanneld
+          params:
+            keys: ["CTres", "SUV"]
+#        - name: Orientationd
+#          params:
+#            keys: ["CTres", "SUV"]
+#            axcodes: "RAS"
+#        - name: Spacingd
+#          params:
+#            keys: ["CTres", "SUV"]
+#            pixdim: *spacing        
+#            mode: ["bilinear", "bilinear"]
+        - name: ScaleIntensityRanged
+          params:
+            keys: ["CTres"]
+            a_min: *a_min_ct
+            a_max: *a_max_ct
+            b_min: *b_min_ct
+            b_max: *b_max_ct
+            clip: *clip_ct
+        - name: ScaleIntensityRanged
+          params:
+            keys: ["SUV"]
+            a_min: *a_min_suv
+            a_max: *a_max_suv
+            b_min: *b_min_suv
+            b_max: *b_max_suv
+            clip: *clip_suv
+#        - name: CropForegroundd
+#          params:
+#            keys: ["CTres", "SUV"]
+#            source_key: "CTres"
+        - name: ConcatItemsd
+          params:
+            keys: ["CTres", "SUV"]
+            name: "CTres_SUV"
+            dim: 0                                 
+        - name: ToTensord
+          params:
+            keys: ["CTres_SUV"]
+#            keys: ["CTres", "SUV"]
+
+
+# Tuner:
+#     min_lr: !!python/float 1e-6
+#     max_lr: !!python/float 1e-1
+#     num_training: 100
